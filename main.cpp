@@ -1,8 +1,10 @@
 #include <iostream>
-#include <random>
-#include <algorithm>
 #include <vector>
 #include <climits>
+#include <map>
+#include <cmath>
+#include <ctime>
+
 
 const int N = 4;
 const int MAX_DEPTH = 100;
@@ -14,7 +16,6 @@ struct State {
     int y;
 
     State() {
-        // inicializa el tablero en orden
         board.resize(N, std::vector<int>(N));
         int val = 1;
         for (int i = 0; i < N; i++) {
@@ -28,6 +29,10 @@ struct State {
         y = N - 1;
     }
 
+    bool operator==(const State& other) const {
+        return board == other.board && x == other.x && y == other.y;
+    }
+
     void print() const {
         for (int i = 0; i < N; i++) {
             for (int j = 0; j < N; j++) {
@@ -36,10 +41,6 @@ struct State {
             std::cout << std::endl;
         }
         std::cout << std::endl;
-    }
-
-    bool operator==(const State& other) const {
-        return board == other.board && x == other.x && y == other.y;
     }
 };
 
@@ -59,143 +60,109 @@ int heuristic_Manhattan(const State& state) {
 }
 
 std::vector<State> successors(const State& state) {
-    std::vector<State> successors;
+    std::vector<State> successor;
     int x = state.x;
     int y = state.y;
-    auto board = state.board; // create a new board vector
     if (x > 0) {
-        State s;
-        s.board = board; // use the new board vector
-        s.x = x - 1;
-        s.y = y;
-        s.board[x][y] = board[x - 1][y];
-        s.board[x - 1][y] = 0; // cambio aquí, pongo 0 en lugar de board[x][y]
-        successors.push_back(s);
+        State s = state;
+        std::swap(s.board[x][y], s.board[x-1][y]);
+        s.x = x-1;
+        successor.push_back(s);
     }
-    if (x < N - 1) {
-        State s;
-        s.board = board; // use the new board vector
-        s.x = x + 1;
-        s.y = y;
-        s.board[x][y] = board[x + 1][y];
-        s.board[x + 1][y] = 0; // cambio aquí, pongo 0 en lugar de board[x][y]
-        successors.push_back(s);
+    if (x < N-1) {
+        State s = state;
+        std::swap(s.board[x][y], s.board[x+1][y]);
+        s.x = x+1;
+        successor.push_back(s);
     }
     if (y > 0) {
-        State s;
-        s.board = board; // use the new board vector
-        s.x = x;
-        s.y = y - 1;
-        s.board[x][y] = board[x][y - 1];
-        s.board[x][y - 1] = 0; // cambio aquí, pongo 0 en lugar de board[x][y]
-        successors.push_back(s);
+        State s = state;
+        std::swap(s.board[x][y], s.board[x][y-1]);
+        s.y = y-1;
+        successor.push_back(s);
     }
-    if (y < N - 1) {
-        State s;
-        s.board = board; // use the new board vector
-        s.y = y + 1;
-        s.x = x;
-        s.board[x][y] = board[x][y + 1];
-        s.board[x][y + 1] = 0; // cambio aquí, pongo 0 en lugar de board[x][y]
-        successors.push_back(s);
+    if (y < N-1) {
+        State s = state;
+        std::swap(s.board[x][y], s.board[x][y+1]);
+        s.y = y+1;
+        successor.push_back(s);
     }
-    return successors;
+    return successor;
 }
 
 
-int search(State& state, int g, int depth, int bound, std::vector<State>& path) {
-    int h = heuristic_Manhattan(state);
-    int f = g + h;
-    if (f > bound) {
-        return f;
+void search(State state, int g, int bound, int (*Manhattan)(const State&), std::vector<State>& solution, bool& found_solution) {
+    int f = g + Manhattan(state);
+    if (f > bound || g >= MAX_DEPTH) {
+        return;
     }
-    if (h == 0) {
-        path.push_back(state);
-        return -1;
+    if (Manhattan(state) == 0) {
+        found_solution = true;
+        solution.push_back(state);
+        return;
     }
-    int min_cost = INF;
-    for (State& successor : successors(state)) {
-        if (successor == State()) {  // incorrecto
-            path.push_back(successor);
-            int t = search(successor, g + 1, depth + 1, bound, path);
-            if (t == -1) {
-                return -1;
-            }
-            if (t < min_cost) {
-                min_cost = t;
-            }
-            path.pop_back();
-        } else if (successor == State()) {  // correcto
-            path.push_back(successor);
-            int t = search(successor, g + 1, depth + 1, bound, path);
-            if (t == -1) {
-                return -1;
-            }
-            if (t < min_cost) {
-                min_cost = t;
-            }
-            path.pop_back();
+    int min_t = INF;
+    std::vector<State> succ = successors(state);
+    for (State& s : succ) {
+        if (s == state) {
+            continue;
         }
+        int t = g + Manhattan(s);
+        if (t <= bound) {
+            search(s, g + 1, bound, Manhattan, solution, found_solution);
+            if (found_solution) {
+                solution.push_back(state);
+                return;
+            }
+        }
+        min_t = std::min(min_t, t);
     }
-    return min_cost;
+    bound = min_t;
 }
 
 std::vector<State> idaStar(const State& start) {
-    std::vector<State> path;
     int bound = heuristic_Manhattan(start);
     while (true) {
-        int t = search(const_cast<State&>(start), 0, 0, bound, path);
-        if (t == -1) {
-            return path;
+        std::vector<State> solution;
+        bool found_solution = false;
+        search(start, 0, bound, heuristic_Manhattan, solution, found_solution);
+        if (found_solution) {
+            reverse(solution.begin(), solution.end());
+            return solution;
+        } else if (bound == INF) {
+            return solution;
         }
-        if (t == INF) {
-            return {};
-        }
-        bound = t;
+        bound++;
     }
 }
 
-void solve(State& state) {
-    std::vector<State> path = idaStar(state);
-    if (path.empty()) {
-        std::cout << "No se encontró solución dentro del límite de profundidad " << MAX_DEPTH << "." << std::endl;
+
+void solve(State state) {
+    std::cout << "Tablero inicial:" << std::endl;
+    state.print();
+    std::vector<State> solution = idaStar(state);
+    if (solution.empty()) {
+        std::cout << "No se encontro solucion" << std::endl;
     } else {
-        std::cout << "Estado inicial:" << std::endl;
-        state.print();
-        for (int i = 0; i < path.size(); i++) {
-            std::cout << "Movimiento " << i + 1 << ":" << std::endl;
-            path[i].print();
-        }
-        std::cout << "Estado final:" << std::endl;
-        path.back().print();
+        std::cout << "Solucion encontrada con costo " << solution.size()-1 << std::endl;
+        std::cout << " " << std::endl;
+        State final_state = solution.back();
+        std::cout << "Tablero final:" << std::endl;
+        final_state.print();
     }
 }
+
 
 
 int main() {
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dis(0, N * N - 1);
-
     State state;
-    // mezcla el tablero inicial aleatoriamente
-    for (int i = 0; i < N * N; i++) {
-        int pos1 = dis(gen);
-        int pos2 = dis(gen);
-        int temp = state.board[pos1 / N][pos1 % N];
-        state.board[pos1 / N][pos1 % N] = state.board[pos2 / N][pos2 % N];
-        state.board[pos2 / N][pos2 % N] = temp;
+    srand(time(nullptr));
+
+    for (int i = 0; i < 100; i++) {
+        std::vector<State> successor = successors(state);
+        int rand_index = rand() % successor.size();
+        state = successor[rand_index];
     }
-    for (int i = 0; i < N; i++) {
-        for (int j = 0; j < N; j++) {
-            if (state.board[i][j] == 0) {
-                state.x = i;
-                state.y = j;
-            }
-        }
-    }
-    std::cout << "Estado inicial:" << std::endl;
-    state.print();
 
     solve(state);
 
